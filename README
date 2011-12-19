@@ -1,0 +1,21 @@
+- AutoGame -
+
+Synopsis
+--------
+Little framework for auto playing clicking game. This version play Restaurant City on Facebook.
+
+
+Versions
+--------
+* 0.1 - First Version (19/12/2011)
+ - Collect money
+ - Fix toilets
+ - Clear plates
+ - Fixing machine
+ - Accepting gifts
+ - Watering plants
+ - Open restaurant for 30mn
+ - Restart on timer and when no click have been made for a long time
+ - Each screenshots can be saved
+ - Can play multiple game simultaneously
+ 
