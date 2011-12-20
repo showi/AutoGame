@@ -1,5 +1,11 @@
 #!/usr/bin/perl
 
+local $| = 1;
+
+###############################################################################
+# AutoGame - Version 0.1
+###############################################################################
+
 ###############################################################################
 package AutoGame::Class;
 
@@ -549,6 +555,7 @@ our %fields = (
 	stats        => undef,
 	bmp_patterns => undef,
 	is_running   => undef,
+	is_paused    => undef,
 );
 
 sub new {
@@ -570,8 +577,18 @@ sub init {
 	$s->stats->started_on(time);
 	$s->bmp_patterns( {} );
 	$s->is_running(1);
+	$s->is_paused(0);
 }
 
+sub toggle_pause {
+	my ($s) = @_;
+	if ($s->is_paused) {
+		$s->is_paused(0);
+	} else {
+		$s->is_paused(1);
+	}
+	print "Toggle pause: " . $s->is_paused . "\n";
+}
 sub load_bmp_patterns {
 	my ( $s, $dir ) = @_;
 	$s->bmp_patterns( () );
@@ -614,7 +631,12 @@ sub add_window {
 
 sub run {
 	my ($s) = shift;
+	die "No window to play with!" unless scalar  @{ $s->windows };
 	while ( $s->is_running ) {
+		if ($s->is_paused) {
+			sleep(1);
+			next;
+		}
 		for my $win ( @{ $s->windows } ) {
 			ShowWindow( $win->id, SW_SHOW );
 			ShowWindow( $win->id, SW_MAXIMIZE );
@@ -738,13 +760,48 @@ sub accept_gift {
 	}
 	$win->set_greedy_search(1);
 }
+
 sub close_popup {
 	my ($game, $win) = @_;
 	print "-> Closing popup\n";
 	$win->search_and_click( $game->get_patterns('popup'),
-		undef, $cb_sleep_screen, undef, $cb_sleep5s );
+		undef, $cb_sleep_screen, undef, $cb_sleep5s ) and $win->screenshot->take;
 }
 
+sub helpout {
+	my($game, $win) = @_;
+	$win->set_greedy_search(0);
+	if ($win->search_and_click( $game->get_patterns('help_helpout'), undef, undef, undef, undef )) {
+		sleep(3);
+		$win->screenshot->take;
+		$win->set_greedy_search(1);
+		if($win->search_and_click( $game->get_patterns('fb_share'), undef, undef, undef, undef )){
+			sleep(1);
+			$win->screenshot->take;
+		}
+		return helpout($game, $win);
+	}
+	$win->set_greedy_search(1);
+}
+
+sub daily_ingredient {
+	my($game, $win) = @_;
+	if($win->search_and_click( $game->get_patterns('dailyingredient'), undef, undef, undef, undef )) {
+		sleep(3);
+		$win->screenshot->take;
+		close_popup($game, $win);
+	}
+}
+
+sub help_friends {
+	my($game, $win) = @_;
+	if($win->search_and_click( $game->get_patterns('help_truck'), undef, undef, undef, undef )) {
+		sleep(1);
+		$win->screenshot->take;
+		helpout($game, $win);
+		close_popup($game, $win);
+	}
+}
 
 sub rc_restart {
 	my ($game, $win) = @_;
@@ -755,9 +812,10 @@ sub rc_restart {
 	$win->search_and_click( $game->get_patterns('bookmark_rc'),
 		undef, undef, undef, undef );
 	$win->wait_and_click( $game->get_patterns('popup_skip'), 40,
-		undef, $cb_sleep_screen, undef, sub {sleep(10)} );
-	accept_gift($game, $win);
-	close_popup($game, $win);
+		undef, $cb_sleep_screen, undef, sub { sleep(15) } );
+	accept_gift($game, $win, undef, $cb_sleep_screen);
+	close_popup($game, $win, undef, $cb_sleep_screen);
+	#sleep(1);
 }
 
 sub rc_open {
@@ -781,9 +839,9 @@ sub rc_open {
 
 sub process_window {
 	my ( $s, $win ) = @_;
-#	print "---- Game stats -----\n";
-#	print $s->stats->to_s;
-#	print "\n";
+	print "---- Game stats -----\n";
+	print $s->stats->to_s;
+	print "\n";
 	if (time_to_restart($s, $win)) {
 		print "Need restart (Time)\n";
 		rc_restart($s, $win);
@@ -816,9 +874,9 @@ sub process_window {
 		undef,
 		undef
 	);
-	print "-> Opening restaurant\n";
 	rc_open( $s, $win );
-	print "-> Collect\n";
+	daily_ingredient($s, $win);
+	help_friends($s, $win);
 	$win->search_and_click( $s->get_patterns('collect'),
 		undef, $cb_sleep_screen );
 	$win->search_and_click( $s->get_patterns('watering'),
@@ -849,10 +907,16 @@ use Imager::Search::Driver::BMP24;
 
 import AutoGame::Utilities qw(stat_inc);
 
+$SIG{SIGTSTP}=\&sig_pause;
+
+
 #######
 # MAIN
 #######
 my $Game = new AutoGame::App::RC;
+sub sig_pause {
+	$Game->toggle_pause;
+}
 $Game->load_bmp_patterns("rc/patterns/");
 $Game->add_window( '.*Google Chrome.*', undef, 2 );
 $Game->run();
